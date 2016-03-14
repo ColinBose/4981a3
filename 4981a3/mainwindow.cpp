@@ -1,17 +1,17 @@
 #include "mainwindow.h"
-#include "ui_mainwindow.h"
+
 #include "main.h"
-#include <QMutex>
 #include <vector>
 #include <string>
-extern QMutex printAccess;
+#include <QTime>
+#include <QDateTime>
+extern char userName[MAXNAME];
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow)
 {
     //qRegisterMetaType("QTextBlock");
     ui->setupUi(this);
-
 }
 QString getText(){
     //return ui->inputText->toPlainText();
@@ -24,20 +24,33 @@ MainWindow::~MainWindow()
 
 void MainWindow::on_inputButton_clicked()
 {
-    QString hateQt = ui->inputText->toPlainText();
-    if(hateQt.length() == 0){
+    QString sendString = ui->inputText->toPlainText();
+    if(sendString.length() == 0){
+        printf("Pm doesnt work");
+                fflush(stdout);
         return;
     }
-    showText(hateQt);
+    QTime clock = clock.currentTime();
+    QString time = clock.toString(Qt::TextDate);
+    QByteArray ba = time.toLatin1();
+    char isitc[600] = { 0 };
+    char * header = ba.data();
+    ba = sendString.toLatin1();
+    char * body = ba.data();
+    sprintf(isitc, "[%s] %s: %s",header, userName, body );
+    showText(sendString);
     ui->inputText->clear();
-    printAccess.lock();
-    ui->outputText->append(hateQt);
-    printAccess.unlock();
+//    printAccess.lock();
+    printf("String to append2: %s\n", isitc);
+    ui->outputText->append(isitc);
+  //  printAccess.unlock();
+    fflush(stdout);
 }
-void MainWindow::setText(char * hateQt){
+/*void MainWindow::setText(char * hateQt){
      ui->outputText->append(hateQt);
 }
-void MainWindow::addUser(std::vector<std::string> hateQt){
+*/
+/*void MainWindow::addUser(std::vector<std::string> hateQt){
    // ui->userList->clear();
     printf("In main window");
     fflush(stdout);
@@ -56,3 +69,4 @@ void MainWindow::addUser(std::vector<std::string> hateQt){
 
 
 }
+*/
