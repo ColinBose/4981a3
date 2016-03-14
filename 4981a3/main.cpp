@@ -26,7 +26,7 @@
 -- prompted for date. The date string is then sent to the server and the
 -- response (echo) back from the server is displayed.
 ---------------------------------------------------------------------------------------*/
-#include "mainwindow.h"
+
 #include <QApplication>
 #include <stdio.h>
 #include "signalobject.h"
@@ -46,54 +46,70 @@
 #include "main.h"
 #include <QMutex>
 #include <vector>
-#define SERVER_TCP_PORT   7000  // Default port
-#define BUFFSIZE      512    // Buffer length
-#define MAXNAME 30
-#define MAXCLIENTS 1000
-#define MAXLISTSIZE MAXCLIENTS * MAXNAME
+#include "mainwindow.h"
+
 using namespace std;
+char userName[MAXNAME] = { 0 };
 char * readSock(int sd, int bSize);
 void updateList();
 MainWindow * mw;
 std::vector<std::string> nameList;
-QMutex printAccess;
 int sd;
 void sendNamesToList(char names[]);
 void removeFromNameList(std::string remove);
+
+//The read thread, called after initial list setup
+//Reads data and prints to main window
 void * readThread(void * arg){
 
     char pass[BUFFSIZE] = { 0 };
     char * bp;
+
     while(1){
+        printf("Entering read");
+        fflush(stdout);
         bp = readSock(sd, BUFFSIZE);
+        printf("BG in read: %s Pass before copy: %s\n", bp, pass);
         strcpy(pass,bp);
-        printf("PREEDIT %s:", bp);
+       // printf("Pass after copy: %s\n", pass );
+
+        //Checks user disconnect
         if(pass[0] == ':'){
             printf("Removing user");
             fflush(stdout);
             string p(pass);
             removeFromNameList(p);
         }
+
+        //Check user connect
         else if(pass[0] == '*'){
-            string p(pass);
             char * temp;
-            char * hold;
-            p.erase(0,1);
-            hold = (char *)p.c_str();
-            temp = strtok(hold, " ");
-            string q(temp);
-            nameList.push_back(q);
-            emit mw->addUser(nameList);
+            char tempArray[MAXNAME + 15];
+            temp = tempArray;
+            strcpy(temp, pass);
+            temp++;
+            temp = strtok(temp, " ");
+            nameList.push_back(temp);
+            printf("BP: %s pass: %s\n", temp, pass);
+            QMetaObject::invokeMethod(mw, "addUserList", Q_ARG(QString,temp));
+
         }
-        printf ("First: %s %s", bp, pass);
-        printAccess.lock();
-        emit mw->setText(pass);
-        printf (" Second: %s %s", bp, pass);
-        printAccess.unlock();
-        fflush(stdout);
+        //Print it to window
+        printf("pass before print: %s BP before print: %s\n", pass, bp);
+        //sprintf(outputString, "" )
+        QMetaObject::invokeMethod(mw, "addMainOutput", Q_ARG(QString,pass));
   }
 }
-
+//Clears user list then repopulates
+void popUserList(){
+    QMetaObject::invokeMethod(mw, "setEditText", Q_ARG(QString, "Hi"));
+    for (std::vector<std::string>::const_iterator name = nameList.begin(); name != nameList.end(); ++name)
+       {
+        QString qstr = QString::fromStdString(*name);
+        QMetaObject::invokeMethod(mw, "addUserList", Q_ARG(QString,qstr));
+       }
+}
+//Removes name from vector
 void removeFromNameList(std::string remove){
     char * temp;
     char * hold;
@@ -101,23 +117,20 @@ void removeFromNameList(std::string remove){
     hold = (char *)remove.c_str();
     temp = strtok(hold, " ");
     nameList.erase(std::remove(nameList.begin(), nameList.end(), temp), nameList.end());
-    updateList();
+    popUserList();
 }
-
+//Write to socket
 void showText(QString text){
     QByteArray ba = text.toLatin1();
     const char * out = ba.data();
-    qDebug(out);
     send (sd, out, BUFFSIZE, 0);
 }
-
+/*
 void * writeThread(void * arg){
     char sbuf[BUFFSIZE];
      QString text;
     int len;
       while(1){
-    // fgets (sbuf, BUFFSIZE, stdin);
-      //text = w.getText;
           if((len = strlen(sbuf)) == 0){
        continue;
      }
@@ -126,6 +139,9 @@ void * writeThread(void * arg){
 
    }
 }
+*/
+
+//Splits name list on initial startup and populate vector
 void sendNamesToList(char names[]){
     char * tempName;
     std::string f;
@@ -136,32 +152,25 @@ void sendNamesToList(char names[]){
     f = tempName;
     nameList.push_back(f);
     while((tempName = strtok(NULL, "-")) != NULL){
-        //tempName = strtok(NULL, "-");
         f = tempName;
         nameList.push_back(f);
 
     }
 }
-void updateList(){
-    emit mw->addUser(nameList);
-}
-
+//Called in read loop/startup to read bSize bytes from socket
 char * readSock(int sd, int bSize){
   int n = 0;
   char readBuff[bSize] = {0 };
   char * buf = readBuff;
   buf = readBuff;
   int bytesLeft = bSize;
-    printf("Starting read %d: ", bSize);
-    fflush(stdout);
   while((n = recv(sd, buf, bytesLeft, 0)) < bSize){
     buf += n;
     bytesLeft -= n;
   }
-    printf("done read");
-    fflush(stdout);
   return buf;
 }
+//Main, sets up socket, does user list stuff, sends name to server then starts read thread.
 int main (int argc, char **argv)
 {
 
@@ -198,7 +207,6 @@ int main (int argc, char **argv)
       fprintf(stderr, "Usage: %s host [port]\n", argv[0]);
       exit(1);
   }
-qDebug("Hello");
   // Create the socket
   if ((sd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
   {
@@ -223,12 +231,25 @@ qDebug("Hello");
     exit(1);
   }
   char names[MAXLISTSIZE];
+  printf("before readsock");
+  fflush(stdout);
   strcpy(names, readSock(sd, MAXLISTSIZE));
   printf("Got Name List %s", names);
   //printf("Recieved: %s \n", readSock(sd, MAXLISTSIZE));
+  printf("before sendnames");
+  fflush(stdout);
   sendNamesToList(names);
-  updateList();
+  printf("before popuser");
+  fflush(stdout);
+  popUserList();
+  printf("before write");
+  fflush(stdout);
   write(sd, clientName, MAXNAME);
+  printf("Using name %s: ", clientName);
+  printf("after write");
+  fflush(stdout);
+  strcpy(userName, clientName);
+  fflush(stdout);
   printf("Connected:    Server Name: %s\n", hp->h_name);
   pptr = hp->h_addr_list;
   printf("\t\tIP Address: %s\n", inet_ntop(hp->h_addrtype, *pptr, str, sizeof(str)));
