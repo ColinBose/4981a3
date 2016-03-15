@@ -50,7 +50,7 @@
 
 using namespace std;
 char userName[MAXNAME] = { 0 };
-char * readSock(int sd, int bSize);
+void readSock(int sd, int bSize, char * buf);
 void updateList();
 MainWindow * mw;
 std::vector<std::string> nameList;
@@ -68,7 +68,7 @@ void * readThread(void * arg){
     while(1){
         printf("Entering read");
         fflush(stdout);
-        bp = readSock(sd, BUFFSIZE);
+        readSock(sd, BUFFSIZE, bp);
         printf("BG in read: %s Pass before copy: %s\n", bp, pass);
         strcpy(pass,bp);
        // printf("Pass after copy: %s\n", pass );
@@ -158,17 +158,18 @@ void sendNamesToList(char names[]){
     }
 }
 //Called in read loop/startup to read bSize bytes from socket
-char * readSock(int sd, int bSize){
+void readSock(int sd, int bSize, char * buf){
   int n = 0;
-  char readBuff[bSize] = {0 };
-  char * buf = readBuff;
-  buf = readBuff;
   int bytesLeft = bSize;
   while((n = recv(sd, buf, bytesLeft, 0)) < bSize){
     buf += n;
     bytesLeft -= n;
+    fflush(stdout);
+    if(bytesLeft == 0){
+        break;
+    }
   }
-  return buf;
+  //return readBuff;
 }
 //Main, sets up socket, does user list stuff, sends name to server then starts read thread.
 int main (int argc, char **argv)
@@ -231,25 +232,22 @@ int main (int argc, char **argv)
     exit(1);
   }
   char names[MAXLISTSIZE];
-  printf("before readsock");
+  printf("before readsock %d %d", sd, MAXLISTSIZE);
   fflush(stdout);
-  strcpy(names, readSock(sd, MAXLISTSIZE));
-  printf("Got Name List %s", names);
-  //printf("Recieved: %s \n", readSock(sd, MAXLISTSIZE));
-  printf("before sendnames");
-  fflush(stdout);
+
+  char * tempList = names;
+  readSock(sd, MAXLISTSIZE, tempList);
+  printf("Read sock return: %s ZZ\n", tempList);
+
+  strcpy(names, tempList);
+
   sendNamesToList(names);
-  printf("before popuser");
-  fflush(stdout);
+
   popUserList();
-  printf("before write");
-  fflush(stdout);
+
   write(sd, clientName, MAXNAME);
-  printf("Using name %s: ", clientName);
-  printf("after write");
-  fflush(stdout);
+
   strcpy(userName, clientName);
-  fflush(stdout);
   printf("Connected:    Server Name: %s\n", hp->h_name);
   pptr = hp->h_addr_list;
   printf("\t\tIP Address: %s\n", inet_ntop(hp->h_addrtype, *pptr, str, sizeof(str)));
